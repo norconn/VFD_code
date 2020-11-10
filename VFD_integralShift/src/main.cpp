@@ -90,6 +90,7 @@ unsigned long millislast = 0;
 unsigned long millislasttemp = 0;
 
 int temperature;
+String location;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", 3600, 3600000);
@@ -99,15 +100,17 @@ void assemblePayload();
 
 void setup()
 {
+  // Pin modes
   pinMode(dataPin, OUTPUT);
   pinMode(blankPin, OUTPUT);
   pinMode(clockPin, OUTPUT);
 
+  // Start serial link for debugging
   Serial.begin(115200);
   Serial.println();
 
+  // Start WiFi and wait for connection
   WiFi.begin("WongKei_FreeDialUp", "elpsycongroo");
-
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED)
   {
@@ -115,31 +118,47 @@ void setup()
     Serial.print(".");
   }
   Serial.println();
-
   Serial.print("Connected, IP address: ");
   Serial.println(WiFi.localIP());
 
+  // Start the NTP client
   timeClient.begin();
+
+  // Get local location
+  HTTPClient http;
+  http.begin("http://ip-api.com/line/?fields=city");
+  
+  int httpResponse = http.GET();
+
+  if(httpResponse != 200)
+     Serial.print("Error: HTTP Response = ");
+  else
+  {
+    location = http.getString();
+    location.replace("\n","");
+  }
+  http.end();
 }
 
 void loop()
 {
   // Get the time, keep trying if error. Probably still a problem here?
-  
-    while(!timeClient.update())
-    {
-      timeClient.forceUpdate();
-    }
+  while(!timeClient.update())
+  {
+    timeClient.forceUpdate();
+  }
 
-  // Get the temperature
+  // Get the weather
   if((millis() - millislasttemp) > (3600000) || millislasttemp == 0)
   {
     HTTPClient http;
-    String serverPath = "http://wttr.in/Bourges?format=\"%t\"";
+    String serverPath = "http://wttr.in/" + location + "?format=\"%t+%C\"";
+    Serial.println(serverPath);
     http.begin(serverPath);
     
     int httpResponse = http.GET();
     String httpPayload;
+    int conditionLocation;
 
     if(httpResponse != 200)
     {
@@ -150,15 +169,33 @@ void loop()
     {
       httpPayload = http.getString();
       Serial.println(httpPayload);
+
+      if(httpPayload[7] == ' ')
+      {
+        matrixL0val = httpPayload[1];
+        matrixL1val = httpPayload[2];
+        matrixL2val = httpPayload[3];
+        matrixL3val = '$';
+        conditionLocation = 8;
+      }
+      else
+      {
+        matrixL0val = httpPayload[1];
+        matrixL1val = httpPayload[2];
+        matrixL2val = '$';
+        conditionLocation = 7;
+      }
+      
+      String weatherCondition = "";
+      for(int i = conditionLocation; httpPayload[i] != '\"'; ++i)
+      {
+        weatherCondition += httpPayload[i];
+      }
+      Serial.println(weatherCondition);
     }
-  
-    matrixL0val = httpPayload[1];
-    matrixL1val = httpPayload[2];
-    matrixL2val = httpPayload[3];
-    matrixL3val = '$';
 
     millislasttemp = millis();
-    Serial.println(temperature);
+    http.end();
   }
  
   timeDisplay[0] = timeClient.getHours() / 10;
