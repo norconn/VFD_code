@@ -48,7 +48,7 @@ int payload[12] = {0};
 int timeDisplay[6];
 int digits[7] = {0, 1, 2, 3, 4, 5, 6};
 
-bool dots[6] = {0, 1, 0, 1, 0, 0};
+bool dots[6] = {0, 0, 1, 0, 1, 0};
 bool commas[6] = {0};
 bool colons[2][2] = {
   {0, 0},
@@ -60,18 +60,18 @@ char matrixL2val = ' ';
 char matrixL3val = ' ';
 bool percent = 0;
 
-int digit0val = 0;
-int digit1val = 0;
-int digit2val = 0;
+int digit0val = ' ';
+int digit1val = ' ';
+int digit2val = ' ';
 
 bool responseval = 0;
 bool fast = 0;
 bool mid = 0;
 bool slow = 0;
 
-int digit3val = 0; 
-int digit4val = 0; 
-int digit5val = 0;
+int digit3val = ' '; 
+int digit4val = ' '; 
+int digit5val = ' ';
 int digit6val = ' ';
 
 bool animal = 0;
@@ -79,12 +79,12 @@ bool HI = 0;
 bool OKval = 0;
 bool LO = 0;
 
-bool d6barL = 0;
-bool d6barR = 0;
+bool d6barL = 1;
+bool d6barR = 1;
 
-char matrixR0val = ' ';
-char matrixR1val = ' ';
-char matrixR2val = ' ';
+char matrixR0val = 'A';
+char matrixR1val = 'B';
+char matrixR2val = 'C';
 
 unsigned long millislast = 0;
 unsigned long millislasttemp = 0;
@@ -148,6 +148,13 @@ void loop()
     timeClient.forceUpdate();
   }
 
+  if(Serial.available())
+  {
+    matrixR0val = matrixR1val;
+    matrixR1val = matrixR2val;
+    matrixR2val = Serial.read();
+  }
+
   // Get the weather
   if((millis() - millislasttemp) > (3600000) || millislasttemp == 0)
   {
@@ -205,15 +212,15 @@ void loop()
   timeDisplay[4] = timeClient.getSeconds() / 10;
   timeDisplay[5] = timeClient.getSeconds() % 10;
 
-  digit0val = timeDisplay[0];
-  digit1val = timeDisplay[1];
-  digit2val = timeDisplay[2];
-  digit3val = timeDisplay[3];
-  digit4val = timeDisplay[4];
-  digit5val = timeDisplay[5];
+  digit1val = timeDisplay[0];
+  digit2val = timeDisplay[1];
+  digit3val = timeDisplay[2];
+  digit4val = timeDisplay[3];
+  digit5val = timeDisplay[4];
+  digit6val = timeDisplay[5];
 
   grid = 0;
-  while (grid < 14)
+  while (grid <= 14)
   {
     assemblePayload();
     sendData();
