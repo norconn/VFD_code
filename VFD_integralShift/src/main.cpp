@@ -1,14 +1,15 @@
 #include <Arduino.h>
 #include <NTPClient.h>
 #include <ESP8266WiFi.h>
-#include <WiFiUdp.h>
+#include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
+#include <WiFiUdp.h>
+#include <WiFiClientSecureBearSSL.h>
 
 #include <chars.h>
 #include <digit.h>
 
-// WiFiUDP ntpUDP;
-// NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 1000);
+ESP8266WiFiMulti WiFiMulti;
 
 // Pin definitions
 
@@ -45,7 +46,7 @@ int grid = 0;
 // Display data variables
 
 int payload[12] = {0};
-int timeDisplay[6];
+int timeDisplay[6] = {8, 8, 8, 8, 8, 8, };
 int digits[7] = {0, 1, 2, 3, 4, 5, 6};
 
 bool dots[6] = {0, 0, 1, 0, 1, 0};
@@ -82,9 +83,9 @@ bool LO = 0;
 bool d6barL = 1;
 bool d6barR = 1;
 
-char matrixR0val = 'A';
-char matrixR1val = 'B';
-char matrixR2val = 'C';
+char matrixR0val = ' ';
+char matrixR1val = ' ';
+char matrixR2val = ' ';
 
 unsigned long millislast = 0;
 unsigned long millislasttemp = 0;
@@ -92,8 +93,13 @@ unsigned long millislasttemp = 0;
 int temperature;
 String location;
 
+int day;
+
+int pwmon = 0;
+int pwmoff = 0;
+
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", 3600, 3600000);
+NTPClient timeClient(ntpUDP, "europe.pool.ntp.org", 7200, 3600000);
 
 void sendData();
 void assemblePayload();
@@ -109,102 +115,158 @@ void setup()
   Serial.begin(115200);
   Serial.println();
 
-  // Start WiFi and wait for connection
-  WiFi.begin("WongKei_FreeDialUp", "elpsycongroo");
+  // Start WiFi
+  WiFi.mode(WIFI_STA);
+  WiFiMulti.addAP("WongKei_FreeDialUp", "elpsycongroo");
+  // WiFi.begin("WongKei_FreeDialUp", "elpsycongroo");
   Serial.print("Connecting");
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
-  Serial.print("Connected, IP address: ");
-  Serial.println(WiFi.localIP());
 
   // Start the NTP client
   timeClient.begin();
 
   // Get local location
-  HTTPClient http;
-  http.begin("http://ip-api.com/line/?fields=city");
+  // HTTPClient http;
+  // http.begin("http://ip-api.com/line/?fields=city");
   
-  int httpResponse = http.GET();
+  // int httpResponse = http.GET();
 
-  if(httpResponse != 200)
-     Serial.print("Error: HTTP Response = ");
-  else
-  {
-    location = http.getString();
-    location.replace("\n","");
-  }
-  http.end();
+  // if(httpResponse != 200)
+  //    Serial.print("IP Error: HTTP Response = ");
+  // else
+  // {
+  //   location = http.getString();
+  //   location.replace("\n","");
+  // }
+  // http.end();
+  location = "Bourges";
 }
 
 void loop()
 {
-  // Get the time, keep trying if error. Probably still a problem here?
-  while(!timeClient.update())
-  {
-    timeClient.forceUpdate();
-  }
+  // HTTPClient http;
+  String serverPath = "http://wttr.in/" + location + "?format=\"%t+%C\"/";
+  String httpPayload;
+  int httpResponse;
+  String weatherCondition = "";
+  int conditionLocation;
 
-  if(Serial.available())
+  if ((WiFiMulti.run() == WL_CONNECTED))
   {
-    matrixR0val = matrixR1val;
-    matrixR1val = matrixR2val;
-    matrixR2val = Serial.read();
-  }
 
-  // Get the weather
-  if((millis() - millislasttemp) > (3600000) || millislasttemp == 0)
-  {
-    HTTPClient http;
-    String serverPath = "http://wttr.in/" + location + "?format=\"%t+%C\"";
-    Serial.println(serverPath);
-    http.begin(serverPath);
-    
-    int httpResponse = http.GET();
-    String httpPayload;
-    int conditionLocation;
+    std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
 
-    if(httpResponse != 200)
+    client->setInsecure();
+
+    HTTPClient https;
+
+
+    // Get the time, keep trying if error. Probably still a problem here?
+    while(!timeClient.update())
     {
-      Serial.print("Error: HTTP Response = ");
-      Serial.println(httpResponse);
+      timeClient.forceUpdate();
     }
-    else
-    {
-      httpPayload = http.getString();
-      Serial.println(httpPayload);
 
-      if(httpPayload[7] == ' ')
-      {
-        matrixL0val = httpPayload[1];
-        matrixL1val = httpPayload[2];
-        matrixL2val = httpPayload[3];
-        matrixL3val = '$';
-        conditionLocation = 8;
+    // Get the weather
+    if((millis() - millislasttemp) > (3600000) || millislasttemp == 0)
+    {
+      if (https.begin(*client, "https://wttr.in/Bourges?format=%22%t+%C%22"))
+      {  // HTTPS
+        Serial.print("[HTTPS] GET...\n");
+        // start connection and send HTTP header
+        httpResponse = https.GET();
+
+        // httpCode will be negative on error
+        if (httpResponse > 0)
+        {
+          // HTTP header has been send and Server response header has been handled
+          Serial.printf("[HTTPS] GET... code: %d\n", httpResponse);
+
+          // file found at server
+          if (httpResponse == HTTP_CODE_OK || httpResponse == HTTP_CODE_MOVED_PERMANENTLY)
+          {
+            httpPayload = https.getString();
+            Serial.println(httpPayload);
+            if(httpPayload[7] == ' ')
+            {
+              matrixL0val = httpPayload[1];
+              matrixL1val = httpPayload[2];
+              matrixL2val = httpPayload[3];
+              matrixL3val = '$';
+              conditionLocation = 8;
+            } 
+            else
+            {
+              matrixL0val = httpPayload[1];
+              matrixL1val = httpPayload[2];
+              matrixL2val = '$';
+              matrixL3val = ' ';
+              conditionLocation = 7;
+            }
+          
+            for(int i = conditionLocation; httpPayload[i] != '\"'; ++i)
+            {
+              weatherCondition += httpPayload[i];
+            }
+          }
+        
+        millislasttemp = millis();
       }
       else
-      {
-        matrixL0val = httpPayload[1];
-        matrixL1val = httpPayload[2];
-        matrixL2val = '$';
-        conditionLocation = 7;
-      }
-      
-      String weatherCondition = "";
-      for(int i = conditionLocation; httpPayload[i] != '\"'; ++i)
-      {
-        weatherCondition += httpPayload[i];
-      }
-      Serial.println(weatherCondition);
-    }
+        Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpResponse).c_str());
 
-    millislasttemp = millis();
-    http.end();
+      https.end();
+    }
+    else
+      Serial.printf("[HTTPS] Unable to connect\n");
   }
+  https.end();
+}
  
+  if (timeDisplay[0] != timeClient.getHours() / 10)
+  {
+    day = timeClient.getDay();
+    switch (day)
+    {
+    case 1:
+      matrixR0val = 'M';
+      matrixR1val = 'O';
+      matrixR2val = 'N';
+      break;
+    case 2:
+      matrixR0val = 'T';
+      matrixR1val = 'U';
+      matrixR2val = 'E';
+      break;
+    case 3:
+      matrixR0val = 'W';
+      matrixR1val = 'E';
+      matrixR2val = 'D';
+      break;
+    case 4:
+      matrixR0val = 'T';
+      matrixR1val = 'H';
+      matrixR2val = 'U';
+      break;
+    case 5:
+      matrixR0val = 'F';
+      matrixR1val = 'R';
+      matrixR2val = 'I';
+      break;
+    case 6:
+      matrixR0val = 'S';
+      matrixR1val = 'A';
+      matrixR2val = 'T';
+      break;
+    case 0:
+      matrixR0val = 'S';
+      matrixR1val = 'U';
+      matrixR2val = 'N';
+      break;
+    default:
+      break;
+    }
+  }
+
   timeDisplay[0] = timeClient.getHours() / 10;
   timeDisplay[1] = timeClient.getHours() % 10;
   timeDisplay[2] = timeClient.getMinutes() / 10;
@@ -212,13 +274,35 @@ void loop()
   timeDisplay[4] = timeClient.getSeconds() / 10;
   timeDisplay[5] = timeClient.getSeconds() % 10;
 
-  digit1val = timeDisplay[0];
-  digit2val = timeDisplay[1];
-  digit3val = timeDisplay[2];
-  digit4val = timeDisplay[3];
-  digit5val = timeDisplay[4];
-  digit6val = timeDisplay[5];
+  if ((pwmon > 0) || (pwmoff < 0))
+  {
+    digit1val = ' ';
+    digit2val = ' ';
+    digit3val = ' ';
+    digit4val = ' ';
+    digit5val = ' ';
+    digit6val = ' ';
+    
+    ++pwmoff;
+    pwmon = 0;
+    // Serial.print("off ");
+    // Serial.println(pwmoff, DEC);
+  }
+  else
+  {
+    digit1val = timeDisplay[0];
+    digit2val = timeDisplay[1];
+    digit3val = timeDisplay[2];
+    digit4val = timeDisplay[3];
+    digit5val = timeDisplay[4];
+    digit6val = timeDisplay[5];
 
+    ++pwmon;
+    pwmoff = 0;
+    // Serial.print("on ");
+    // Serial.println(pwmon, DEC);
+  }
+  
   grid = 0;
   while (grid <= 14)
   {
@@ -328,7 +412,7 @@ void assemblePayload()
       break;
 
     default:
-      Serial.println("Something's gone wrong...continuing regardless!");
+      // Serial.println("Something's gone wrong...continuing regardless!");
       break;
   }
   
