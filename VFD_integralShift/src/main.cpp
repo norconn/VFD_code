@@ -193,19 +193,29 @@ void loop()
               matrixL2val = httpPayload[3];
               matrixL3val = '$';
               conditionLocation = 8;
+              for(int i = conditionLocation; httpPayload[i] != '\"'; ++i)
+              {
+                weatherCondition += httpPayload[i];
+              }
             } 
-            else
+            else if(httpPayload[6] == ' ')
             {
               matrixL0val = httpPayload[1];
               matrixL1val = httpPayload[2];
               matrixL2val = '$';
               matrixL3val = ' ';
               conditionLocation = 7;
+              for(int i = conditionLocation; httpPayload[i] != '\"'; ++i)
+              {
+                weatherCondition += httpPayload[i];
+              }
             }
-          
-            for(int i = conditionLocation; httpPayload[i] != '\"'; ++i)
+            else  // Error lite - service saturated etc.
             {
-              weatherCondition += httpPayload[i];
+              matrixL0val = ' ';
+              matrixL1val = ' ';
+              matrixL2val = ' ';
+              matrixL3val = ' ';
             }
           }
         
@@ -273,6 +283,9 @@ void loop()
   timeDisplay[3] = timeClient.getMinutes() % 10;
   timeDisplay[4] = timeClient.getSeconds() / 10;
   timeDisplay[5] = timeClient.getSeconds() % 10;
+
+  // if((millis() % 13) == 0)
+  //   animal ^= 1;
 
   if ((pwmon > 0) || (pwmoff < 0))
   {
